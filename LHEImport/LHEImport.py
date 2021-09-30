@@ -22,29 +22,17 @@ class LHEImport(object):
         # self.barcode = barcode
         self.event_num = event_num
         self.events = []
+        self.root,self.init_ind, self.event_ind, self.num_events = self.readfile()
+        self.event_num = self.event_ind
         # self.Particle = self.Particle()
 
     def __str__(self):
         return "LHEParser: %s".format(self.filename)
 
-    def parse(self):
-        '''
-        parse contents of input file and extract the particles
-        
-        Returns
-        -------
-        Event
-            Event object containning info about the event
-        list[NodeParticle]
-            Collection of Node particles to be assigned to a graph
-        '''
-
-        # parsing the xml
+    def readfile(self):
         tree = ET.parse(self.filename)
         root = tree.getroot()
         tags = [r.tag for r in root]
-
-        # determining index of init block
         init_ind = tags.index('init')
         event_ind = tags.index('event')
         num_events = tags.count('event')
