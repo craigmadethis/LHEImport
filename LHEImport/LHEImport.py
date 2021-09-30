@@ -46,15 +46,50 @@ class LHEImport(object):
 
         # determining index of init block
         init_ind = tags.index('init')
+        event_ind = tags.index('event')
+        num_events = tags.count('event')
+        return (root,
+                init_ind,
+                event_ind,
+                num_events)
 
-        ## obtain user event
-        event_ind = init_ind
-        event_ind = tags.index('event',self.event_num)
+    # def parse(self):
+    #     '''
+    #     parse contents of input file and extract the particles
+    #     Returns
+    #     -------
+    #     Event
+    #         Event object containning info about the event
+    #     list[NodeParticle]
+    #         Collection of Node particles to be assigned to a graph
+    #     '''
 
-        event, node_particles = self.parse_event_text(root[event_ind].text)
-        return event, node_particles
-        
+    #     # parsing the xml
+    #     tree = ET.parse(self.filename)
+    #     root = tree.getroot()
+    #     tags = [r.tag for r in root]
 
+    #     # determining index of init block
+    #     init_ind = tags.index('init')
+
+    #     ## obtain user event
+    #     event_ind = init_ind
+    #     event_ind = tags.index('event',self.event_num)
+
+    #     init = self.parse_init_line(root[init_ind].text)
+    #     event, node_particles = self.parse_event_text(root[event_ind].text)
+    #     return event, node_particles, init
+    def importevents(self, limit_events=False):
+        events = []
+        init = self.parse_init_line(self.root[self.init_ind].text)
+        if limit_events:
+            for i in range(self.event_ind, int((self.num_events+1)*0.01)):
+                events.append(self.parse_event_text(self.root[i].text))
+        else:
+            for i in range(self.event_ind, self.num_events+1):
+                events.append( self.parse_event_text(self.root[i].text))
+        data = {'stats': init, 'eventdata': events}
+        return data
 
 
     def map_columns_to_dict(self, fields, line, delim=None):
