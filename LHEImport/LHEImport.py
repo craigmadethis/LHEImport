@@ -122,6 +122,18 @@ class LHEImport(object):
         contents = self.map_columns_to_dict(fields, line)
         return contents
 
+    def parse_init_line(self, line):
+        '''
+        determined the init fields from package
+        https://github.com/scikit-hep/pylhe/blob/master/src/pylhe/__init__.py
+        '''
+        fields = ["beamA", "beamB", "E BeamA", "E BeamB",
+                  "PDFgroupA","PDFgroupB",
+                  "PDFsetA","PDFsetB","weighting_strat", "numProcesses",
+                  "XSec", "error", "unit weight", "procId"]
+        contents = self.map_columns_to_dict(fields,line)
+        return contents
+
     def parse_particle_line(self,line,barcode):
         fields = ["pdgid", "status", "parent1", "parent2", "col1", "col2",
                       "px", "py", "pz", "energy", "mass", "lifetime", "spin"]
