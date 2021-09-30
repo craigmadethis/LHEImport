@@ -9,7 +9,7 @@ class LHEImport(object):
     if unassigned, return first event in file
     '''
 
-    def __init__(self,filename,event_num=1):
+    def __init__(self,filename):
         '''
         params
         ------
