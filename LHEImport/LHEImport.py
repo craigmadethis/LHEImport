@@ -131,7 +131,6 @@ class LHEImport(object):
                      pz=float(contents_dict['pz']),
                      energy=float(contents_dict['energy']),
                      mass=float(contents_dict['mass']))
-
         return p
 
 
