@@ -20,7 +20,6 @@ class LHEImport(object):
         '''
         self.filename = filename
         # self.barcode = barcode
-        self.event_num = event_num
         self.events = []
         self.root,self.init_ind, self.event_ind, self.num_events = self.readfile()
         self.event_num = self.event_ind
@@ -83,29 +82,27 @@ class LHEImport(object):
     def map_columns_to_dict(self, fields, line, delim=None):
         '''
         Splits a line into fields, stores them in a dict
-        
         '''
         parts = line.strip().split(delim)[0:len(fields)+1]
         return {k: v.strip() for k,v in zip(fields, parts)}
 
     def parse_event_text(self, text):
         event = None
-        node_particles = []
+        final_particles = []
         counter = 1
         for line in text.split('\n'):
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
-            
-            if not event: 
-                event = self.parse_event_line(line, self.event_num)
+            if not event:
+                event = self.parse_event_line(line)
             else:
                 node_particle = self.parse_particle_line(line, barcode=counter)
-                node_particles.append(node_particle)
+                final_particles.append(node_particle)
                 counter += 1
-        return event, node_particles
+        return {'eventstats':event, 'final_particles':final_particles}
 
-    def parse_event_line(self, line, event_num):
+    def parse_event_line(self, line):
         fields = ["num_particles", "proc_id", "weight", "scale", "aQED", "aQCD"]
         contents = self.map_columns_to_dict(fields, line)
         return contents
