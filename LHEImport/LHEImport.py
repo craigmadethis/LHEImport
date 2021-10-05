@@ -122,20 +122,18 @@ class LHEImport(object):
     def parse_particle_line(self,line,barcode):
         fields = ["pdgid", "status", "parent1", "parent2", "col1", "col2",
                       "px", "py", "pz", "energy", "mass", "lifetime", "spin"]
+        # p = self.map_columns_to_dict(fields,line)
+        # don't want to use the class for now, want to display all the lhe data
         contents_dict = self.map_columns_to_dict(fields,line)
         p = Particle(barcode=barcode,
                      pdgid=int(contents_dict['pdgid']),
                      status=int(contents_dict['status']),
+                     parent1 = int(contents_dict['parent1']),
+                     parent2 = int(contents_dict['parent2']),
                      px=float(contents_dict['px']),
                      py=float(contents_dict['py']),
                      pz=float(contents_dict['pz']),
                      energy=float(contents_dict['energy']),
-                     mass=float(contents_dict['mass']))
+                     mass=float(contents_dict['mass']),
+                     spin=float(contents_dict['spin']))
         return p
-
-
-
-
-
-
-
