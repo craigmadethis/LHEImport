@@ -36,9 +36,14 @@ class LHEImport(object):
             event_particles = Data["eventdata"][i]["final_particles"]
             for particle in event_particles:
                 datalist.append(particle.__dict__)
-        df = pd.DataFrame(datalist)
-        df.to_hdf(f"{filename}.h5", key=f"{key}")
+        df_particles = pd.DataFrame(datalist)
+        df_particles.to_hdf(f"{filename}.h5", key=f"{key}")
 
+        '''
+        this next part will import the 'stats' param and export it to hdf5 under
+        the stats key
+        '''
+        # df_stats.to_hdf(f"{filename}.h5", key=f"{stats}")
 
 
     def readfile(self):
