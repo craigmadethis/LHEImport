@@ -1,6 +1,7 @@
 from lxml import etree as ET
 from LHEImport.classes import Particle
 from LHEImport.defs import convert_px_py_pz
+import pandas as pd
 class LHEImport(object):
     '''
     main class to parse a LHE file
@@ -27,6 +28,18 @@ class LHEImport(object):
 
     def __str__(self):
         return "LHEParser: %s".format(self.filename)
+
+    def toHDF5(self, filename, key, limit_events):
+        Data = self.importevents(limit_events=limit_events)
+        datalist = []
+        for i in range(len(Data["eventdata"])):
+            event_particles = Data["eventdata"][i]["final_particles"]
+            for particle in event_particles:
+                datalist.append(particle.__dict__)
+        df = pd.DataFrame(datalist)
+        df.to_hdf(f"{filename}.h5", key=f"{key}")
+
+
 
     def readfile(self):
         tree = ET.parse(self.filename)
