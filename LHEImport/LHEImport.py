@@ -1,6 +1,6 @@
 from lxml import etree as ET
 from LHEImport.classes import Particle
-from LHEImport.defs import convert_px_py_pz
+from LHEImport.defs import convert_px_py_pz, pdgid_to_string
 import pandas as pd
 class LHEImport(object):
     '''
@@ -145,6 +145,8 @@ class LHEImport(object):
         contents_dict = self.map_columns_to_dict(fields,line)
         p = Particle(barcode=barcode,
                      pdgid=int(contents_dict['pdgid']),
+                     pdgid_string=pdgid_to_string(int(contents_dict['pdgid']))[0],
+                     pdgid_latex=pdgid_to_string(int(contents_dict['pdgid']))[1],
                      status=int(contents_dict['status']),
                      parent1 = int(contents_dict['parent1']),
                      parent2 = int(contents_dict['parent2']),
