@@ -87,12 +87,16 @@ class LHEImport(object):
     def importevents(self, limit_events=False):
         events = []
         init = self.parse_init_line(self.root[self.init_ind].text)
+        event_count = 0
         if limit_events:
             for i in range(self.event_ind, int((self.num_events+1)*0.01)):
-                events.append(self.parse_event_text(self.root[i].text))
+                events.append(self.parse_event_text(self.root[i].text,event_count))
+                event_count += 1
         else:
-            for i in range(self.event_ind, self.num_events+1):
-                events.append( self.parse_event_text(self.root[i].text))
+            for i in range(self.event_ind, self.num_events+2):
+                events.append( self.parse_event_text(self.root[i].text,
+                                                     event_count))
+                event_count += 1
         data = {'stats': init, 'eventdata': events}
         return data
 
@@ -104,7 +108,7 @@ class LHEImport(object):
         parts = line.strip().split(delim)[0:len(fields)+1]
         return {k: v.strip() for k,v in zip(fields, parts)}
 
-    def parse_event_text(self, text):
+    def parse_event_text(self, text, event_count):
         event = None
         final_particles = []
         counter = 1
@@ -115,7 +119,9 @@ class LHEImport(object):
             if not event:
                 event = self.parse_event_line(line)
             else:
-                node_particle = self.parse_particle_line(line, barcode=counter)
+                node_particle = self.parse_particle_line(line,
+                                                         barcode=counter,
+                                                         event_count=event_count)
                 final_particles.append(node_particle)
                 counter += 1
         return {'eventstats':event, 'final_particles':final_particles}
@@ -137,7 +143,7 @@ class LHEImport(object):
         contents = self.map_columns_to_dict(fields,line)
         return contents
 
-    def parse_particle_line(self,line,barcode):
+    def parse_particle_line(self,line,barcode, event_count):
         fields = ["pdgid", "status", "parent1", "parent2", "col1", "col2",
                       "px", "py", "pz", "energy", "mass", "lifetime", "spin"]
         # p = self.map_columns_to_dict(fields,line)
@@ -155,5 +161,7 @@ class LHEImport(object):
                      pz=float(contents_dict['pz']),
                      energy=float(contents_dict['energy']),
                      mass=float(contents_dict['mass']),
+                     event_count=int(event_count),
                      spin=float(contents_dict['spin']))
+
         return p
