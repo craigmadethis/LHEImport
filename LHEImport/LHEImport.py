@@ -165,3 +165,5 @@ class LHEImport(object):
                      spin=float(contents_dict['spin']))
 
         return p
+
+
