@@ -72,15 +72,20 @@ def read_lhe(filepath):
             # extracting event info 
             eventdict["eventinfo"] = LHEEventInfo.fromstring(eventdata)
             # extracting weights and attributes
-            # eventdict["weights"] = {}
+            eventdict["weights"] = {}
             # eventdict["attributes"] = element.attrib
             eventdict["particles"] = []
             for p in particles:
                 if not p.strip().startswith("#"):
                     eventdict["particles"] += [LHEParticle.fromstring(p)]
+            for sub in element:
+                if sub.tag =="rwgt":
+                    for r in sub:
+                        if r.tag=="wgt":
+                            eventdict["weights"][r.attrib["id"]]=float(r.text.strip())
             yield LHEEvent(eventinfo = eventdict["eventinfo"],
                            particles=eventdict["particles"],
-                           # weights = eventdict["weights"],
+                           weights = eventdict["weights"],
                            # attributes=eventdict["attributes"]
                            )
 
@@ -88,12 +93,16 @@ def tohdf5(data, filename, key, limit_events=False):
     events = [d for d in data]
     eventinfo= [e.eventinfo for e in events]
     particles = [e.particles for e in events]
+    weights = [e.weights for e in events]
     if limit_events:
         df = pd.DataFrame({'event_info':eventinfo[:int(len(events)*0.1)],
-                           'particles':particles[:int(len(events)*0.1)]})
+                           'particles':particles[:int(len(events)*0.1)],
+                           'weights':weights[:int(len(events)*0.1)],
+                           })
         df.to_hdf(f"{filename}.h5", key=f"{key}")
     else:
-        df = pd.DataFrame({'event_info':eventinfo, 'particles':particles})
+        df = pd.DataFrame({'event_info':eventinfo, 'particles':particles,
+                           'weights':weights})
         df.to_hdf(f"{filename}.h5", key=f"{key}")
 
 # def pdgid_to_string(pdgid):
