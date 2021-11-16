@@ -26,7 +26,7 @@ class LHEParticle(object):
         self.py = 0.0
         self.pz = 0.0
         self.e = 0.0
-        self.mass = 0.0
+        self.m = 0.0
         self.id= 0
         self.__dict__.update(**kwargs)
         self.pdgid=int(self.id)
