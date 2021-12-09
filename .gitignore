@@ -1,4 +1,7 @@
 __pycache__/
 .ipynb_checkpoints/
 event_files/hdf5/
+*.lhe
+*.png
+*.jpg
 
