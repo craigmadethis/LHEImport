@@ -64,19 +64,19 @@ class LHEParticle(object):
 
 
 def read_lhe(filepath):
+    eventdict={}
+    eventdict["weightinfo"]={}
     for event, element in ET.iterparse(filepath, events=["end"]):
-        eventdict={}
         if element.tag == "initrwgt":
             for initrwgtel in element:
                 if initrwgtel.tag == "weightgroup":
-                    eventdict["weightinfo"]={}
                     for weightgroupel in initrwgtel:
                         if weightgroupel.tag=="weight":
                             id = str(weightgroupel.attrib["id"])
                             eventdict["weightinfo"][id] = str(weightgroupel.text).split(' #')[0].split(' ')[-2:]
 
         elif element.tag == "event":
-            eventdict={}
+            # eventdict={}
             ## here we're not extracting the info block
             data = element.text.split("\n")[1:-1]
             eventdata, particles = data[0], data[1:]
@@ -94,12 +94,12 @@ def read_lhe(filepath):
                     for r in sub:
                         if r.tag=="wgt":
                             eventdict["weights"][r.attrib["id"]]=float(r.text.strip())
-        yield LHEEvent(eventinfo = eventdict["eventinfo"],
-                particles=eventdict["particles"],
-                weights = eventdict["weights"],
-                weightinfo=eventdict["weightinfo"],
-                # attributes=eventdict["attributes"]
-                )
+    yield LHEEvent(eventinfo = eventdict["eventinfo"],
+            particles=eventdict["particles"],
+            weights = eventdict["weights"],
+            weightinfo=eventdict["weightinfo"],
+            # attributes=eventdict["attributes"]
+            )
 
 def tohdf5(data, filename, key, limit_events=False):
     events = [d for d in data]
