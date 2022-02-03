@@ -13,6 +13,7 @@ class LHEEvent:
         self.weights = weights
         self.attributes = attributes
 
+
 class LHEEventInfo:
     fieldnames=["nparticles","pid", "weight", "scale", "aqed", "aqcd"]
     def __init__(self, **kwargs):
@@ -21,7 +22,6 @@ class LHEEventInfo:
     @classmethod
     def fromstring(cls, string):
         return cls(**dict(zip(cls.fieldnames, map(float,string.split()))))
-
 class LHEParticle(object):
     def __init__(self, **kwargs):
         self.px = 0.0
@@ -62,7 +62,6 @@ class LHEParticle(object):
 
     def __str__(self):
         return "Particle, PDGID{0}".format( self.pdgid)
-
 
 def read_lhe(filepath):
     weightdict={}
@@ -124,120 +123,6 @@ def extractparams(data, filename, key):
     particles= [e.particles for e in events]
     weights = [e.weights for e in events]
     # weightinfo = [e.weightinfo for e in events]
-
-    def ptot(particles, particle_pdgid):
-        '''
-        determine total transverse momentum of given particle, Z by default
-        use with apply function for dataframes
-        kwargs: - particles expects a pd dataframe column
-                - particle_pdgid is the pdgid of the individual particle
-        '''
-        for p in particles: 
-            if abs(p.pdgid) == particle_pdgid:
-                return p.fourvec.pt
-
-    def event_weight(events):
-        '''
-        return weights from event objects when given column of events
-    '''
-        for event in events: 
-            return event.weight
-
-    def eta(particles, particle_pdgid):
-        '''
-        determine eta of given particle
-        use with apply function for dataframes
-        kwargs: - particles expects a pd dataframe column
-                - particle_pdgid is the pdgid of the individual particle
-        '''
-        for p in particles: 
-            if abs(p.pdgid) == particle_pdgid:
-                return p.fourvec.eta
-
-    def deltaphi(particles, pdgid1, pdgid2):
-        '''
-        determine the difference in phi between two given particles, identified by their pdgids
-        kwargs: - particles: a pd dataframe column
-                - pdgid1: particle 1
-                - pdgid2: particle 2
-        '''
-        particle_list=[]
-        for p in particles:
-            if p.id==pdgid1 or p.id==pdgid2:
-                particle_list.append(p)
-        return particle_list[0].fourvec.deltaphi(particle_list[1].fourvec)
-
-    def deltaeta(particles, pdgid1, pdgid2):
-        '''
-        determine the difference in eta between two given particles, identified by their pdgids
-        kwargs: - particles: a pd dataframe column
-                - pdgid1: particle 1
-                - pdgid2: particle 2
-        '''
-        particle_list=[]
-        for p in particles:
-            if p.id==pdgid1 or p.id==pdgid2:
-                particle_list.append(p)
-        return particle_list[0].fourvec.deltaeta(particle_list[1].fourvec)
-
-    def deltaR(particles, pdgid1, pdgid2):
-        '''
-        determine the difference in eta between two given particles, identified by their pdgids
-        kwargs: - particles: a pd dataframe column
-                - pdgid1: particle 1
-                - pdgid2: particle 2
-        '''
-        particle_list=[]
-        for p in particles:
-            if p.id==pdgid1 or p.id==pdgid2:
-                particle_list.append(p)
-        return particle_list[0].fourvec.deltaR(particle_list[1].fourvec)
-
-    def listparticles(particles): 
-        '''
-        takes the first row of a dataframe and outputs an array of pdgids for _all_ involved particles
-        has it's flaws but often useful for sanity checks
-        '''
-        all_pdgids = []
-        for particle in particles[0]:
-            if particle.pdgid not in all_pdgids:
-                all_pdgids.append(particle.pdgid)
-        return all_pdgids
-
-    def particlebypdgid(particles, pdgid):
-        '''
-        given a list of particles and a single pdgid, the vector object of the particle will be returned
-
-        '''
-        for p in particles: 
-            if p.pdgid == pdgid:
-                return p.fourvec
-
-
-    def cosstarzlep(particles):
-        '''
-        the cosine of the angle
-        between the direction of the Z boson in the detector reference 
-        frame, and the direction of the negatively-charged lepton from
-        the Z boson decay in the rest frame of the Z boson
-
-        to do this we need the Z fourvec
-        identify -ve lepton (+ pdgid bc leptons are -ve)
-        apply boost_p4(four_vector): change coordinate system 
-        using another 4D vector as the difference
-        typically apply the negative 4 vec?
-        '''
-
-        for p in particles: 
-            vecs=[]
-            if p.pdgid == 23:
-                z = p.fourvec
-            elif p.pdgid == 13: 
-                mu_p = p.fourvec
-
-        mu_p_boost = mu_p.boost_p4(z)
-        return np.cos(z.deltaangle(mu_p_boost))
-
     df = pd.DataFrame({'particles':particles, 'weights':weights})
     df['pt_z'] = df.apply(lambda r: ptot(r['particles'],23), axis=1)
     ## extracting eta(Z)
@@ -266,8 +151,123 @@ def extractparams(data, filename, key):
     # df.to_hdf(f"{filename}.h5", key=f"{key}")
     df2.to_hdf(f"{filename}.h5", key=f"{key}")
 
+def ptot(particles, particle_pdgid):
+    '''
+    determine total transverse momentum of given particle, Z by default
+    use with apply function for dataframes
+    kwargs: - particles expects a pd dataframe column
+            - particle_pdgid is the pdgid of the individual particle
+    '''
+    for p in particles: 
+        if abs(p.pdgid) == particle_pdgid:
+            return p.fourvec.pt
+
+def event_weight(events):
+    '''
+    return weights from event objects when given column of events
+'''
+    for event in events: 
+        return event.weight
+
+def eta(particles, particle_pdgid):
+    '''
+    determine eta of given particle
+    use with apply function for dataframes
+    kwargs: - particles expects a pd dataframe column
+            - particle_pdgid is the pdgid of the individual particle
+    '''
+    for p in particles: 
+        if abs(p.pdgid) == particle_pdgid:
+            return p.fourvec.eta
+
+def deltaphi(particles, pdgid1, pdgid2):
+    '''
+    determine the difference in phi between two given particles, identified by their pdgids
+    kwargs: - particles: a pd dataframe column
+            - pdgid1: particle 1
+            - pdgid2: particle 2
+    '''
+    particle_list=[]
+    for p in particles:
+        if p.id==pdgid1 or p.id==pdgid2:
+            particle_list.append(p)
+    return particle_list[0].fourvec.deltaphi(particle_list[1].fourvec)
+
+def deltaeta(particles, pdgid1, pdgid2):
+    '''
+    determine the difference in eta between two given particles, identified by their pdgids
+    kwargs: - particles: a pd dataframe column
+            - pdgid1: particle 1
+            - pdgid2: particle 2
+    '''
+    particle_list=[]
+    for p in particles:
+        if p.id==pdgid1 or p.id==pdgid2:
+            particle_list.append(p)
+    return particle_list[0].fourvec.deltaeta(particle_list[1].fourvec)
+
+def deltaR(particles, pdgid1, pdgid2):
+    '''
+    determine the difference in eta between two given particles, identified by their pdgids
+    kwargs: - particles: a pd dataframe column
+            - pdgid1: particle 1
+            - pdgid2: particle 2
+    '''
+    particle_list=[]
+    for p in particles:
+        if p.id==pdgid1 or p.id==pdgid2:
+            particle_list.append(p)
+    return particle_list[0].fourvec.deltaR(particle_list[1].fourvec)
+
+def listparticles(particles): 
+    '''
+    takes the first row of a dataframe and outputs an array of pdgids for _all_ involved particles
+    has it's flaws but often useful for sanity checks
+    '''
+    all_pdgids = []
+    for particle in particles[0]:
+        if particle.pdgid not in all_pdgids:
+            all_pdgids.append(particle.pdgid)
+    return all_pdgids
+
+def particlebypdgid(particles, pdgid):
+    '''
+    given a list of particles and a single pdgid, the vector object of the particle will be returned
+
+    '''
+    for p in particles: 
+        if p.pdgid == pdgid:
+            return p.fourvec
+
+
+def cosstarzlep(particles):
+    '''
+    the cosine of the angle
+    between the direction of the Z boson in the detector reference 
+    frame, and the direction of the negatively-charged lepton from
+    the Z boson decay in the rest frame of the Z boson
+
+    to do this we need the Z fourvec
+    identify -ve lepton (+ pdgid bc leptons are -ve)
+    apply boost_p4(four_vector): change coordinate system 
+    using another 4D vector as the difference
+    typically apply the negative 4 vec?
+    '''
+
+    for p in particles: 
+        if p.pdgid == 23:
+            z = p.fourvec
+        elif p.pdgid == 13: 
+            mu_p = p.fourvec
+
+    mu_p_boost = mu_p.boost_p4(z)
+    return np.cos(z.deltaangle(mu_p_boost))
+
+
 # def pdgid_to_string(pdgid):
 #     stream = pkg_resources.open_text(__package__, 'pdgid_string.csv')
 #     pdgid_data = pd.read_csv(stream)
 #     pdgid_data=pdgid_data.set_index('ID')
 #     return pdgid_data.loc[pdgid]['Name'], pdgid_data.loc[pdgid]['Latex']
+
+
