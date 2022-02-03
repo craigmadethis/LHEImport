@@ -5,3 +5,4 @@ event_files/hdf5/
 *.png
 *.jpg
 tags
+*.h5
