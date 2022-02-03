@@ -1,169 +1,273 @@
-from lxml import etree as ET
-from LHEImport.classes import Particle
-from LHEImport.defs import convert_px_py_pz, pdgid_to_string
+import xml.etree.ElementTree as ET
+# import math
+import vector
 import pandas as pd
-class LHEImport(object):
-    '''
-    main class to parse a LHE file
+import numpy as np
+# import importlib.resources as pkg_resources
 
-    user passes event number to return that event (first event = 1)
-    if unassigned, return first event in file
-    '''
+class LHEEvent:
+    def __init__(self,  eventinfo, particles, weights=None, attributes=None, weightinfo=None):
+        self.weightinfo = weightinfo
+        self.eventinfo = eventinfo
+        self.particles = particles
+        self.weights = weights
+        self.attributes = attributes
 
-    def __init__(self,filename):
-        '''
-        params
-        ------
-        filename: str
-            Input filename.
-        event_num: int, optional
-            index of event to parse
-        '''
-        self.filename = filename
-        # self.barcode = barcode
-        self.events = []
-        self.root,self.init_ind, self.event_ind, self.num_events = self.readfile()
-        self.event_num = self.event_ind
-        # self.Particle = self.Particle()
+class LHEEventInfo:
+    fieldnames=["nparticles","pid", "weight", "scale", "aqed", "aqcd"]
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self,k,v)
+    @classmethod
+    def fromstring(cls, string):
+        return cls(**dict(zip(cls.fieldnames, map(float,string.split()))))
+
+class LHEParticle(object):
+    def __init__(self, **kwargs):
+        self.px = 0.0
+        self.py = 0.0
+        self.pz = 0.0
+        self.e = 0.0
+        self.m = 0.0
+        self.id= 0
+        self.__dict__.update(**kwargs)
+        self.pdgid=int(self.id)
+        self.fourvec = vector.obj(px=self.px,
+                                  py=self.py,
+                                  pz=self.pz,
+                                  E=self.e)
+        self.pt=self.fourvec.pt
+        self.phi=self.fourvec.phi
+        self.eta=self.fourvec.eta
+        # self.pdgid_string, self.pdgid_latex =pdgid_to_string(self.pdgid)
+
+    fieldnames = [ "id",
+        "status",
+        "mother1",
+        "mother2",
+        "color1",
+        "color2",
+        "px",
+        "py",
+        "pz",
+        "e",
+        "m",
+        "lifetime",
+        "spin",
+    ]
+
+    @classmethod
+    def fromstring(cls,string):
+        return cls(**dict(zip(cls.fieldnames, map(float, string.split()))))
 
     def __str__(self):
-        return "LHEParser: %s".format(self.filename)
+        return "Particle, PDGID{0}".format( self.pdgid)
 
-    def toHDF5(self, filename, key, limit_events):
-        Data = self.importevents(limit_events=limit_events)
-        datalist = []
-        for i in range(len(Data["eventdata"])):
-            event_particles = Data["eventdata"][i]["final_particles"]
-            for particle in event_particles:
-                datalist.append(particle.__dict__)
-        df_particles = pd.DataFrame(datalist)
-        df_particles.to_hdf(f"{filename}.h5", key=f"{key}")
+
+def read_lhe(filepath):
+    weightdict={}
+    for event, element in ET.iterparse(filepath, events=["end"]):
+        if element.tag == "initrwgt":
+            for initrwgtel in element:
+                if initrwgtel.tag == "weightgroup":
+                    for weightgroupel in initrwgtel:
+                        if weightgroupel.tag=="weight":
+                            id = str(weightgroupel.attrib["id"])
+                            weightdict[id] = str(weightgroupel.text).split(' #')[0].split(' ')[-2:]
+        if element.tag == "event":
+            ## here we're not extracting the info block
+            eventdict={}
+            data = element.text.split("\n")[1:-1]
+            eventdata, particles = data[0], data[1:]
+            # extracting event info 
+            eventdict["eventinfo"] = LHEEventInfo.fromstring(eventdata)
+            # extracting weights and attributes
+            eventdict["weights"] = {}
+            # eventdict["attributes"] = element.attrib
+            eventdict["particles"] = []
+            for p in particles:
+                if not p.strip().startswith("#"):
+                    eventdict["particles"] += [LHEParticle.fromstring(p)]
+            for sub in element:
+                if sub.tag =="rwgt":
+                    for r in sub:
+                        if r.tag=="wgt":
+                            eventdict["weights"][r.attrib["id"]]=float(r.text.strip())
+            yield LHEEvent(
+                    eventinfo = eventdict["eventinfo"],
+                    particles=eventdict["particles"],
+                    weights = eventdict["weights"],
+                    weightinfo=weightdict,
+                    # attributes=eventdict["attributes"]
+                    )
+
+def tohdf5(data, filename, key, limit_events=False):
+    events = [d for d in data]
+    eventinfo= [e.eventinfo for e in events]
+    particles = [e.particles for e in events]
+    weights = [e.weights for e in events]
+    weightinfo = [e.weightinfo for e in events]
+    if limit_events:
+        df = pd.DataFrame({'event_info':eventinfo[:int(len(events)*0.1)],
+                           'particles':particles[:int(len(events)*0.1)],
+                           'weights':weights[:int(len(events)*0.1)],
+                           })
+        df.to_hdf(f"{filename}.h5", key=f"{key}")
+    else:
+        df = pd.DataFrame({'event_info':eventinfo, 'particles':particles,
+                           'weights':weights})
+        df.to_hdf(f"{filename}.h5", key=f"{key}")
+
+def extractparams(data, filename, key): 
+    events = [d for d in data]
+    # eventinfo = [e.eventinfo for e in events]
+    particles= [e.particles for e in events]
+    weights = [e.weights for e in events]
+    # weightinfo = [e.weightinfo for e in events]
+
+    def ptot(particles, particle_pdgid):
+        '''
+        determine total transverse momentum of given particle, Z by default
+        use with apply function for dataframes
+        kwargs: - particles expects a pd dataframe column
+                - particle_pdgid is the pdgid of the individual particle
+        '''
+        for p in particles: 
+            if abs(p.pdgid) == particle_pdgid:
+                return p.fourvec.pt
+
+    def event_weight(events):
+        '''
+        return weights from event objects when given column of events
+    '''
+        for event in events: 
+            return event.weight
+
+    def eta(particles, particle_pdgid):
+        '''
+        determine eta of given particle
+        use with apply function for dataframes
+        kwargs: - particles expects a pd dataframe column
+                - particle_pdgid is the pdgid of the individual particle
+        '''
+        for p in particles: 
+            if abs(p.pdgid) == particle_pdgid:
+                return p.fourvec.eta
+
+    def deltaphi(particles, pdgid1, pdgid2):
+        '''
+        determine the difference in phi between two given particles, identified by their pdgids
+        kwargs: - particles: a pd dataframe column
+                - pdgid1: particle 1
+                - pdgid2: particle 2
+        '''
+        particle_list=[]
+        for p in particles:
+            if p.id==pdgid1 or p.id==pdgid2:
+                particle_list.append(p)
+        return particle_list[0].fourvec.deltaphi(particle_list[1].fourvec)
+
+    def deltaeta(particles, pdgid1, pdgid2):
+        '''
+        determine the difference in eta between two given particles, identified by their pdgids
+        kwargs: - particles: a pd dataframe column
+                - pdgid1: particle 1
+                - pdgid2: particle 2
+        '''
+        particle_list=[]
+        for p in particles:
+            if p.id==pdgid1 or p.id==pdgid2:
+                particle_list.append(p)
+        return particle_list[0].fourvec.deltaeta(particle_list[1].fourvec)
+
+    def deltaR(particles, pdgid1, pdgid2):
+        '''
+        determine the difference in eta between two given particles, identified by their pdgids
+        kwargs: - particles: a pd dataframe column
+                - pdgid1: particle 1
+                - pdgid2: particle 2
+        '''
+        particle_list=[]
+        for p in particles:
+            if p.id==pdgid1 or p.id==pdgid2:
+                particle_list.append(p)
+        return particle_list[0].fourvec.deltaR(particle_list[1].fourvec)
+
+    def listparticles(particles): 
+        '''
+        takes the first row of a dataframe and outputs an array of pdgids for _all_ involved particles
+        has it's flaws but often useful for sanity checks
+        '''
+        all_pdgids = []
+        for particle in particles[0]:
+            if particle.pdgid not in all_pdgids:
+                all_pdgids.append(particle.pdgid)
+        return all_pdgids
+
+    def particlebypdgid(particles, pdgid):
+        '''
+        given a list of particles and a single pdgid, the vector object of the particle will be returned
 
         '''
-        this next part will import the 'stats' param and export it to hdf5 under
-        the stats key
+        for p in particles: 
+            if p.pdgid == pdgid:
+                return p.fourvec
+
+
+    def cosstarzlep(particles):
         '''
-        # df_stats.to_hdf(f"{filename}.h5", key=f"{stats}")
+        the cosine of the angle
+        between the direction of the Z boson in the detector reference 
+        frame, and the direction of the negatively-charged lepton from
+        the Z boson decay in the rest frame of the Z boson
 
-
-    def readfile(self):
-        tree = ET.parse(self.filename)
-        root = tree.getroot()
-        tags = [r.tag for r in root]
-        init_ind = tags.index('init')
-        event_ind = tags.index('event')
-        num_events = tags.count('event')
-        return (root,
-                init_ind,
-                event_ind,
-                num_events)
-
-    # def parse(self):
-    #     '''
-    #     parse contents of input file and extract the particles
-    #     Returns
-    #     -------
-    #     Event
-    #         Event object containning info about the event
-    #     list[NodeParticle]
-    #         Collection of Node particles to be assigned to a graph
-    #     '''
-
-    #     # parsing the xml
-    #     tree = ET.parse(self.filename)
-    #     root = tree.getroot()
-    #     tags = [r.tag for r in root]
-
-    #     # determining index of init block
-    #     init_ind = tags.index('init')
-
-    #     ## obtain user event
-    #     event_ind = init_ind
-    #     event_ind = tags.index('event',self.event_num)
-
-    #     init = self.parse_init_line(root[init_ind].text)
-    #     event, node_particles = self.parse_event_text(root[event_ind].text)
-    #     return event, node_particles, init
-    def importevents(self, limit_events=False):
-        events = []
-        init = self.parse_init_line(self.root[self.init_ind].text)
-        event_count = 0
-        if limit_events:
-            for i in range(self.event_ind, int((self.num_events+1)*0.01)):
-                events.append(self.parse_event_text(self.root[i].text,event_count))
-                event_count += 1
-        else:
-            for i in range(self.event_ind, self.num_events+2):
-                events.append( self.parse_event_text(self.root[i].text,
-                                                     event_count))
-                event_count += 1
-        data = {'stats': init, 'eventdata': events}
-        return data
-
-
-    def map_columns_to_dict(self, fields, line, delim=None):
+        to do this we need the Z fourvec
+        identify -ve lepton (+ pdgid bc leptons are -ve)
+        apply boost_p4(four_vector): change coordinate system 
+        using another 4D vector as the difference
+        typically apply the negative 4 vec?
         '''
-        Splits a line into fields, stores them in a dict
-        '''
-        parts = line.strip().split(delim)[0:len(fields)+1]
-        return {k: v.strip() for k,v in zip(fields, parts)}
 
-    def parse_event_text(self, text, event_count):
-        event = None
-        final_particles = []
-        counter = 1
-        for line in text.split('\n'):
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            if not event:
-                event = self.parse_event_line(line)
-            else:
-                node_particle = self.parse_particle_line(line,
-                                                         barcode=counter,
-                                                         event_count=event_count)
-                final_particles.append(node_particle)
-                counter += 1
-        return {'eventstats':event, 'final_particles':final_particles}
+        for p in particles: 
+            vecs=[]
+            if p.pdgid == 23:
+                z = p.fourvec
+            elif p.pdgid == 13: 
+                mu_p = p.fourvec
 
-    def parse_event_line(self, line):
-        fields = ["num_particles", "proc_id", "weight", "scale", "aQED", "aQCD"]
-        contents = self.map_columns_to_dict(fields, line)
-        return contents
+        mu_p_boost = mu_p.boost_p4(z)
+        return np.cos(z.deltaangle(mu_p_boost))
 
-    def parse_init_line(self, line):
-        '''
-        determined the init fields from package
-        https://github.com/scikit-hep/pylhe/blob/master/src/pylhe/__init__.py
-        '''
-        fields = ["beamA", "beamB", "E BeamA", "E BeamB",
-                  "PDFgroupA","PDFgroupB",
-                  "PDFsetA","PDFsetB","weighting_strat", "numProcesses",
-                  "XSec", "error", "unit weight", "procId"]
-        contents = self.map_columns_to_dict(fields,line)
-        return contents
+    df = pd.DataFrame({'particles':particles, 'weights':weights})
+    df['pt_z'] = df.apply(lambda r: ptot(r['particles'],23), axis=1)
+    ## extracting eta(Z)
+    df['eta_z'] = df.apply(lambda r: eta(r['particles'],23), axis=1)
+    ## calc delta phi from two leptons from the Z, in this case the mu+ and mu-
+    df['deltaphi_ll_Z'] = df.apply(lambda r: deltaphi(r['particles'], 13, -13), axis=1)
 
-    def parse_particle_line(self,line,barcode, event_count):
-        fields = ["pdgid", "status", "parent1", "parent2", "col1", "col2",
-                      "px", "py", "pz", "energy", "mass", "lifetime", "spin"]
-        # p = self.map_columns_to_dict(fields,line)
-        # don't want to use the class for now, want to display all the lhe data
-        contents_dict = self.map_columns_to_dict(fields,line)
-        p = Particle(barcode=barcode,
-                     pdgid=int(contents_dict['pdgid']),
-                     pdgid_string=pdgid_to_string(int(contents_dict['pdgid']))[0],
-                     pdgid_latex=pdgid_to_string(int(contents_dict['pdgid']))[1],
-                     status=int(contents_dict['status']),
-                     parent1 = int(contents_dict['parent1']),
-                     parent2 = int(contents_dict['parent2']),
-                     px=float(contents_dict['px']),
-                     py=float(contents_dict['py']),
-                     pz=float(contents_dict['pz']),
-                     energy=float(contents_dict['energy']),
-                     mass=float(contents_dict['mass']),
-                     event_count=int(event_count),
-                     spin=float(contents_dict['spin']))
+    # t's
+    ## extracting pt(t)
+    df['pt_t'] = df.apply(lambda r: ptot(r['particles'],6 ), axis=1)
+    ## extracting eta(t)
+    df['eta_t'] = df.apply(lambda r: eta(r['particles'],6), axis=1)
 
-        return p
+    # t~'s
+    ## extracting pt(t~)
+    df['pt_tbar'] = df.apply(lambda r: ptot(r['particles'],-6 ), axis=1)
+    ## extracting eta(t~)
+    df['eta_tbar'] = df.apply(lambda r: eta(r['particles'],-6), axis=1)
 
+    # deltaR
+    df['dR_t_z'] = df.apply(lambda r: deltaR(r['particles'], 6, 23), axis=1)
 
+    # cos theta star z
+    df['cosstar'] = df.apply(lambda r: cosstarzlep(r['particles']), axis=1)
+    df2 = df.drop('particles', axis=1)
+    # df.to_hdf(f"{filename}.h5", key=f"{key}")
+    df2.to_hdf(f"{filename}.h5", key=f"{key}")
+
+# def pdgid_to_string(pdgid):
+#     stream = pkg_resources.open_text(__package__, 'pdgid_string.csv')
+#     pdgid_data = pd.read_csv(stream)
+#     pdgid_data=pdgid_data.set_index('ID')
+#     return pdgid_data.loc[pdgid]['Name'], pdgid_data.loc[pdgid]['Latex']
