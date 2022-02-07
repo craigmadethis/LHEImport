@@ -276,4 +276,12 @@ def cosstarzlep(particles):
 #     pdgid_data=pdgid_data.set_index('ID')
 #     return pdgid_data.loc[pdgid]['Name'], pdgid_data.loc[pdgid]['Latex']
 
-
+def getSample(df, samplesize, weights):
+    '''
+    from provided dataframe, fetch a sample of size samplesize given a set of weights
+    df: pd.dataframe(data)
+    samplesize: int, size of sample required
+    weights: array of size df
+    '''
+    pseudo_idx = np.random.choice(df.shape[0], size=samplesize, replace=True, p = weights/weights.sum() )
+    return df.iloc[pseudo_idx]
