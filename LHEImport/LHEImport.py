@@ -63,7 +63,11 @@ class LHEParticle(object):
     def __str__(self):
         return "Particle, PDGID{0}".format( self.pdgid)
 
-def read_lhe(filepath):
+def gen_weight_dict(filepath):
+    '''
+    provide an lhe file and generate a {coeff: value} dict for the rwgt scheme
+    returns: dictionary of weighting coefficents, {coeff:val}
+    '''
     weightdict={}
     for event, element in ET.iterparse(filepath, events=["end"]):
         if element.tag == "initrwgt":
@@ -72,7 +76,25 @@ def read_lhe(filepath):
                     for weightgroupel in initrwgtel:
                         if weightgroupel.tag=="weight":
                             id = str(weightgroupel.attrib["id"])
-                            weightdict[id] = str(weightgroupel.text).split(' #')[0].split(' ')[-2:]
+                            if weightgroupel.text != None:
+                                split = str(weightgroupel.text).split(' #')[0].split(' ')[-2:]
+                                # weightdict[id] = str(weightgroupel.text).split(' #')[0].split(' ')[-2:]
+                                coeff = split[0]
+                                val = split[1]
+                                weightdict[id] = {coeff: val}
+                            else:
+                                weightdict[id] = {None: None}
+            else:
+                break # break here as we don't want to loop over the entire file
+    return weightdict
+
+def read_events(filepath):
+    '''
+    input: filepath of lhe file
+    returns: pd.Dataframe with cols: [eventinfo, particles and weights], each row is an individual event
+    '''
+    events =[]
+    for event, element in ET.iterparse(filepath, events=["end"]):
         if element.tag == "event":
             ## here we're not extracting the info block
             eventdict={}
@@ -92,38 +114,22 @@ def read_lhe(filepath):
                     for r in sub:
                         if r.tag=="wgt":
                             eventdict["weights"][r.attrib["id"]]=float(r.text.strip())
-            yield LHEEvent(
-                    eventinfo = eventdict["eventinfo"],
-                    particles=eventdict["particles"],
-                    weights = eventdict["weights"],
-                    weightinfo=weightdict,
-                    # attributes=eventdict["attributes"]
-                    )
+            events.append([
+                    eventdict["eventinfo"],
+                    eventdict["particles"],
+                    eventdict["weights"],
+                    ])
+    params = ['eventinfo', 'particles', 'weights']
+    df = pd.DataFrame(events, columns=params)
+    return df
 
-def tohdf5(data, filename, key, limit_events=False):
-    events = [d for d in data]
-    eventinfo= [e.eventinfo for e in events]
-    particles = [e.particles for e in events]
-    weights = [e.weights for e in events]
-    weightinfo = [e.weightinfo for e in events]
-    if limit_events:
-        df = pd.DataFrame({'event_info':eventinfo[:int(len(events)*0.1)],
-                           'particles':particles[:int(len(events)*0.1)],
-                           'weights':weights[:int(len(events)*0.1)],
-                           })
-        df.to_hdf(f"{filename}.h5", key=f"{key}")
-    else:
-        df = pd.DataFrame({'event_info':eventinfo, 'particles':particles,
-                           'weights':weights})
-        df.to_hdf(f"{filename}.h5", key=f"{key}")
 
-def extractparams(data, filename, key): 
-    events = [d for d in data]
-    # eventinfo = [e.eventinfo for e in events]
-    particles= [e.particles for e in events]
-    weights = [e.weights for e in events]
-    # weightinfo = [e.weightinfo for e in events]
-    df = pd.DataFrame({'particles':particles, 'weights':weights})
+
+def extract_params(df): 
+    '''
+    accept a dataframe with eventinfo, particles and weights
+    return dataframe with predefined parameters specific to current project
+    '''
     df['pt_z'] = df.apply(lambda r: ptot(r['particles'],23), axis=1)
     ## extracting eta(Z)
     df['eta_z'] = df.apply(lambda r: eta(r['particles'],23), axis=1)
@@ -147,9 +153,9 @@ def extractparams(data, filename, key):
 
     # cos theta star z
     df['cosstar'] = df.apply(lambda r: cosstarzlep(r['particles']), axis=1)
-    df2 = df.drop('particles', axis=1)
+    df2 = df.drop(['particles','eventinfo'], axis=1)
     # df.to_hdf(f"{filename}.h5", key=f"{key}")
-    df2.to_hdf(f"{filename}.h5", key=f"{key}")
+    return df2
 
 def ptot(particles, particle_pdgid):
     '''
